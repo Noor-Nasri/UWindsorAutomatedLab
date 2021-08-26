@@ -1,1 +1,1 @@
-program
+Python program made to automate the work for a postgrad at UWindsor
