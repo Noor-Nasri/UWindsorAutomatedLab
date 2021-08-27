@@ -5,6 +5,7 @@ import xlrd
 constant_ID = "SQRT(I_D)"
 constant_VG = "V_G"
 constant_dist = 0.5
+#26063286.16
 
 class Point:
     def __init__(self, gateV, drainI):
@@ -13,14 +14,18 @@ class Point:
         self.artist = None
 
 class Graph:
-    def __init__(self, run):
+    def __init__(self, run, w, l, c):
         self.selected = [None, None]
+        self.multiplier = 2*l/(c*w)
         self.sqRange = 0
         self.points = []
         self.run = run
     
+    def sortKey(self, p): return p.gateV
+
     def addPoint(self, point):
         self.points.append(point)
+        self.points = sorted(self.points, key=self.sortKey, reverse=True)
         if self.sqRange < point.sqDrainI:
             self.sqRange = point.sqDrainI
     
@@ -31,8 +36,13 @@ class Graph:
 
         b, m = polyfit(xValues, yValues, 1)
         calculatedValues = [m * xValues[i] + b for i in range(len(xValues))]
+        
+        mobility = self.multiplier * (m**2)
+        coeff_y = (1/m)*(1/b)
+        coeff_x = -(1/b)
+        const_c = (1/m)
 
-        return (xValues, calculatedValues, m, b)
+        return (xValues, calculatedValues, coeff_x, coeff_y, const_c, mobility)
 
     def displayGraph(self):
         self.selected = [self.points[0], self.points[-1]]
@@ -60,8 +70,9 @@ class Graph:
                     self.selected = self.selected[::-1]
 
             # update line and text
-            xValues, calculatedValues, m, b = self.lineOfBestFit()
-            distext = "y = " + str(m) + "x + " + str(b) + "\nU = " + str(26063286.16 * (m**2))
+            xValues, calculatedValues, x, y, c, m = self.lineOfBestFit()
+            
+            distext = "{0}x + {1}y = {2}\nMobility={3}".format(str(x), str(y), str(c), str(m))
             if (event == None):
                 self.lineArtist = ax.plot(xValues, calculatedValues, "r-")[0]
                 self.textArtist = ax.text(0.95, 0.95, distext, transform=ax.transAxes, fontsize=14, horizontalalignment='right',
@@ -91,27 +102,38 @@ class Graph:
             fig.canvas.callbacks.connect('pick_event', on_pick)
 
         createPlot()
-        on_pick()         
+        on_pick()
         plt.show()
 
 def main():
-    workbook = xlrd.open_workbook("test10.xls")
+    length = float(input("Please input length: "))
+    width = float(input("Please input width: "))
+    capacitance = float(input("Please input capacitance: "))
 
-    for i, s in enumerate(workbook.sheets()):
-        if ( i > 5 and s.name[:3] == "Run"):
-            graph = Graph(s.name)
-            last = 1000000
+    print("""=============================================
+Perfect! You can now open .xls files to automate calculations
+Simply input the path to the files one at a time, then for every Run[x] tab a graphic will show.
+For better experience, try maximizing the screen. You can use Ctrl-C to force close
+=============================================""")
 
-            for dr, gv in zip(s.col(0)[1:], s.col(4)[1:]):
-                if gv.value >= last:
-                    break
+    while True:
+        path = input("Please input the path to an xls file: ")
+        workbook = xlrd.open_workbook(path)
 
-                graph.addPoint(Point(gv.value, dr.value))
-                last = gv.value
+        for i, s in enumerate(workbook.sheets()):
+            if ( s.name[:3] == "Run"):
+                print("Opening", s.name, " - once done, simply close the graph!")
+                graph = Graph(s.name, width, length, capacitance)
+                last = 1000000
 
-            graph.displayGraph()
+                for dr, gv in zip(s.col(0)[1:], s.col(4)[1:]):
+                    if gv.value >= last:
+                        break
 
-            break
+                    graph.addPoint(Point(gv.value, dr.value))
+                    last = gv.value
+
+                graph.displayGraph()
 
 if __name__ == '__main__':
     main()
